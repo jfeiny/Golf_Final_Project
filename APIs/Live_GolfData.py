@@ -14,18 +14,22 @@ def fetch_and_store_data(year, statId, start_index=0, batch_size=25,
         "X-RapidAPI-Host": "live-golf-data.p.rapidapi.com"
     }
 
-    # Build safe path to dbs/FedEx_Cup_Standings.db at project root
+    # Paths
     base_dir = Path(__file__).resolve().parent.parent
-    db_path = base_dir / "dbs" / "FedEx_Cup_Standings.db"
-    os.makedirs(db_path.parent, exist_ok=True)
+    fedex_db_path = base_dir / "dbs" / "FedEx_Cup_Standings_2024.db"
+    rankings_db_path = base_dir / "dbs" / "current_world_rankings.db"
+    os.makedirs(fedex_db_path.parent, exist_ok=True)
 
-    conn = sqlite3.connect(str(db_path))
-    cursor = conn.cursor()
+    # Connect to both databases
+    conn_fedex = sqlite3.connect(str(fedex_db_path))
+    conn_rankings = sqlite3.connect(str(rankings_db_path))
+    cursor_fedex = conn_fedex.cursor()
+    cursor_rankings = conn_rankings.cursor()
 
-    cursor.execute(f'''
+    # Create FedEx table with id = existing player id
+    cursor_fedex.execute(f'''
         CREATE TABLE IF NOT EXISTS {table_name} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            playerId TEXT,
+            id INTEGER PRIMARY KEY,
             firstName TEXT,
             lastName TEXT,
             rank INTEGER,
@@ -36,44 +40,55 @@ def fetch_and_store_data(year, statId, start_index=0, batch_size=25,
     ''')
 
     try:
+        # Load ID lookup from current_world_rankings.db
+        cursor_rankings.execute("SELECT id, first_name, last_name FROM players")
+        rows = cursor_rankings.fetchall()
+        name_to_id = {(first.lower(), last.lower()): pid for pid, first, last in rows}
+
+        # Request data
         querystring = {"year": str(year), "statId": str(statId)}
         response = requests.get(url, headers=headers, params=querystring)
         response.raise_for_status()
         data = response.json()
 
-        # ✅ Extract the player list from data["rankings"]
         items = data.get("rankings", [])
-
-        # Slice the batch (simulate pagination)
         batch = items[start_index:start_index + batch_size]
 
+        inserted = 0
         for item in batch:
-            cursor.execute(f'''
-                INSERT INTO {table_name} (
-                    playerId, firstName, lastName, rank, previousRank, numWins, numTop10s
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                item.get("playerId"),
-                item.get("firstName"),
-                item.get("lastName"),
-                int(item["rank"].get("$numberInt", 0)),
-                item.get("previousRank"),
-                int(item.get("numWins", 0)),
-                int(item.get("numTop10s", 0))
-            ))
+            first = item.get("firstName", "").strip()
+            last = item.get("lastName", "").strip()
+            key = (first.lower(), last.lower())
 
-        conn.commit()
-        print(f"✅ Stored {len(batch)} player records from index {start_index} for statId={statId}, year={year}")
+            player_id = name_to_id.get(key)
 
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Request error: {e}")
-    except json.JSONDecodeError as e:
-        print(f"❌ JSON decoding error: {e}")
+            if player_id:
+                cursor_fedex.execute(f'''
+                    INSERT OR REPLACE INTO {table_name} (
+                        id, firstName, lastName, rank, previousRank, numWins, numTop10s
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    player_id,
+                    first,
+                    last,
+                    int(item.get("rank", {}).get("$numberInt", 0)),
+                    item.get("previousRank"),
+                    int(item.get("numWins", 0)),
+                    int(item.get("numTop10s", 0))
+                ))
+                inserted += 1
+            else:
+                print(f"⚠️ Skipped: {first} {last} not found in current_world_rankings.db")
+
+        conn_fedex.commit()
+        print(f"✅ Inserted {inserted} players into {table_name} using external IDs")
+
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"❌ Error: {e}")
+
     finally:
-        conn.close()
+        conn_fedex.close()
+        conn_rankings.close()
 
-
-# Example usage
-fetch_and_store_data(2024, "02671", start_index=0)
+# Example usage:
+# fetch_and_store_data(2024, "02671", start_index=0)
