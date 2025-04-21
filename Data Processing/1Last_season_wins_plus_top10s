@@ -1,0 +1,31 @@
+import sqlite3
+import pandas as pd
+from pathlib import Path
+
+# Set paths
+base_dir = Path(__file__).resolve().parent.parent
+db_path = base_dir / "dbs" / "All_Golf_Data.db"
+output_csv = Path(__file__).resolve().parent / "fedex_total_achievements.csv"
+
+# Connect to DB
+conn = sqlite3.connect(str(db_path))
+
+# Read data from FedEx_Cup_Standings
+query = """
+SELECT
+    id AS GolferID,
+    firstName || ' ' || lastName AS Name,
+    numWins AS Wins,
+    numTop10s AS Top10s
+FROM
+    FedEx_Cup_Standings
+"""
+df = pd.read_sql_query(query, conn)
+conn.close()
+
+# Calculate total achievements
+df["TotalAchievements"] = df["Wins"] + df["Top10s"]
+
+# Export
+df.to_csv(output_csv, index=False)
+print(f"✅ Exported FedEx achievements to: {output_csv}")

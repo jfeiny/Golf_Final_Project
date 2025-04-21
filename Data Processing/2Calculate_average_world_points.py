@@ -2,23 +2,23 @@ import sqlite3
 import csv
 from pathlib import Path
 
-# Set path to the database (../dbs/current_world_rankings.db)
+# Use unified database
 base_dir = Path(__file__).resolve().parent.parent
-db_path = base_dir / "dbs" / "current_world_rankings.db"
+db_path = base_dir / "dbs" / "All_Golf_Data.db"
 
-# Set output CSV path (in the same directory as this script)
+# Output CSV
 output_path = Path(__file__).resolve().parent / "player_averages.csv"
 
-# Connect to the database
+# Connect to the unified DB
 conn = sqlite3.connect(str(db_path))
 cursor = conn.cursor()
 
-# Fetch player data
-cursor.execute("SELECT first_name, last_name, events_played, points FROM players")
+# Pull from Current_rankings table
+cursor.execute("SELECT first_name, last_name, events_played, points FROM Current_rankings")
 rows = cursor.fetchall()
 conn.close()
 
-# Prepare and write CSV
+# Write to CSV
 with open(output_path, mode="w", newline="") as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow(["Player", "Events Played", "Total Points", "Average Points"])
