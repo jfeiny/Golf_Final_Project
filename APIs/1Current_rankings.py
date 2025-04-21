@@ -7,20 +7,21 @@ from pathlib import Path
 url = "https://api.sportradar.com/golf/trial/v3/en/players/wgr/2025/rankings.json?api_key=7mJFMR3SY3uhkWXNV4F83Zyl9WoaQUMJThtsB6k7"
 headers = {"accept": "application/json"}
 
-# Build safe path to ../dbs/current_world_rankings.db
-base_dir = Path(__file__).resolve().parent.parent  # Go one level up
+# Set the unified DB path
+base_dir = Path(__file__).resolve().parent.parent
 db_dir = base_dir / "dbs"
-db_path = db_dir / "current_world_rankings.db"
+db_path = db_dir / "All_Golf_Data.db"
 os.makedirs(db_dir, exist_ok=True)
 
-# Ensure the table exists and return last assigned autoincrement ID
+table_name = "Current_rankings"
+
 def get_last_player_id():
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    # Updated schema: replace avg_points with events_played
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS players (
+    # Create table if not exists in shared DB
+    cursor.execute(f'''
+    CREATE TABLE IF NOT EXISTS {table_name} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT,
         last_name TEXT,
@@ -29,7 +30,7 @@ def get_last_player_id():
     )
     ''')
 
-    cursor.execute("SELECT MAX(id) FROM players")
+    cursor.execute(f"SELECT MAX(id) FROM {table_name}")
     last_player_id = cursor.fetchone()[0]
     conn.close()
     return last_player_id if last_player_id else 0
@@ -48,7 +49,7 @@ if response.status_code == 200:
         # Step 3: Select next 25 players after last stored
         next_25_players = players[last_player_id:last_player_id + 25]
 
-        # Step 4: Store each new player with events_played + points
+        # Step 4: Store each new player
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
 
@@ -60,15 +61,15 @@ if response.status_code == 200:
             events_played = stats.get("events_played", 0)
             total_points = stats.get("points", 0.0)
 
-            cursor.execute('''
-            INSERT INTO players (first_name, last_name, events_played, points)
+            cursor.execute(f'''
+            INSERT INTO {table_name} (first_name, last_name, events_played, points)
             VALUES (?, ?, ?, ?)
             ''', (first_name, last_name, events_played, total_points))
 
         conn.commit()
         conn.close()
 
-        print(f"✅ Successfully added {len(next_25_players)} new players to the database at {db_path}.")
+        print(f"✅ Added {len(next_25_players)} players to '{table_name}' in {db_path}.")
 
     except ValueError as e:
         print(f"❌ Error decoding JSON: {e}")
