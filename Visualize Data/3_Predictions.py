@@ -1,8 +1,12 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
+
+# Build path to the CSV
+csv_path = Path(__file__).resolve().parent.parent / "Data Processing" / "golfer_win_predictions.csv"
 
 # Load the CSV file
-df = pd.read_csv("golfer_win_predictions.csv")
+df = pd.read_csv(csv_path)
 
 # Clean up column names
 df.columns = [col.strip() for col in df.columns]
