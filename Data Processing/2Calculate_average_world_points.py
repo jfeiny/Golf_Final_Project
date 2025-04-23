@@ -33,3 +33,5 @@ with open(output_path, mode="w", newline="") as csvfile:
         writer.writerow([full_name, events, round(points, 2), avg_points])
 
 print(f"✅ CSV file written to: {output_path}")
+
+#test
